@@ -126,14 +126,18 @@ app.get('/', (req, res) => {
 // Test endpoint (opsional, untuk testing manual)
 app.post('/test', async (req, res) => {
     console.log('🧪 Test endpoint called');
+    console.log('Request body:', req.body);
+    
     const testPayload = {
         username: req.body.username || 'TestUser',
-        displayName: 'Test Donator',
-        amount: req.body.amount || 10000,
+        displayName: req.body.displayName || 'Test Donator',
+        amount: parseInt(req.body.amount) || 10000,
         timestamp: Math.floor(Date.now() / 1000),
         source: 'Test',
-        message: 'Test donation'
+        message: req.body.message || 'Test donation'
     };
+    
+    console.log('Sending payload to Roblox:', testPayload);
     
     try {
         const response = await axios.post(PUBLISH_API_URL, testPayload, {
@@ -142,12 +146,25 @@ app.post('/test', async (req, res) => {
                 'x-api-key': ROBLOX_API_KEY
             }
         });
+        
+        console.log('✅ Successfully sent to Roblox');
+        console.log('Response status:', response.status);
+        console.log('Response data:', response.data);
+        
         res.json({ 
             success: true, 
             status: response.status,
-            sentPayload: testPayload 
+            sentPayload: testPayload,
+            robloxResponse: response.data
         });
     } catch (error) {
+        console.error('❌ Failed to send to Roblox');
+        console.error('Error:', error.message);
+        if (error.response) {
+            console.error('Response status:', error.response.status);
+            console.error('Response data:', error.response.data);
+        }
+        
         res.status(500).json({ 
             success: false, 
             error: error.response?.data || error.message,
