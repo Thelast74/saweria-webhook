@@ -16,7 +16,6 @@ const ROBLOX_API_KEY = process.env.ROBLOX_API_KEY; // Akan diatur di Railway
 const PLACE_ID = process.env.PLACE_ID; // Akan diatur di Railway
 const MESSAGING_TOPIC = process.env.MESSAGING_TOPIC || 'MedusaIDRBroadcast'; // Default ke nilai kamu
 
-// Validasi bahwa variabel penting ada
 if (!ROBLOX_API_KEY || !PLACE_ID) {
     console.error('Environment variables ROBLOX_API_KEY dan PLACE_ID wajib diatur!');
     process.exit(1); // Hentikan server jika tidak ada
@@ -32,30 +31,40 @@ app.post('/saweria-webhook', (req, res) => {
     // Kamu bisa menambahkan validasi signature di sini jika Saweria menyediakannya.
     // Untuk sekarang, kita abaikan validasi untuk kesederhanaan.
 
-    // 2. Ekstrak data dari payload Saweria
-    const saweriaData = req.body.data;
-    if (!saweriaData) {
-        console.error('Payload Saweria tidak valid:', req.body);
-        return res.status(400).send('Bad Request: Data tidak ditemukan');
+    // 2. Ekstrak data dari payload Saweria BERDASARKAN STRUKTUR YANG BARU
+    const saweriaPayload = req.body; // Payload utuh
+    if (!saweriaPayload) {
+        console.error('Payload Saweria tidak ditemukan:', req.body);
+        return res.status(400).send('Bad Request: Payload tidak ditemukan');
     }
 
-    const saweriaName = saweriaData.name || 'Anonymous';
-    const saweriaAmount = saweriaData.amount || 0;
-    const saweriaMessage = saweriaData.message || '';
-    const created_at = saweriaData.created_at;
+    // Periksa apakah ini adalah event donasi
+    if (saweriaPayload.type !== 'donation') {
+        console.log('Bukan event donasi, diabaikan:', saweriaPayload.type);
+        return res.status(200).send('OK - Bukan donation event');
+    }
 
-    console.log(`Donasi diterima: ${saweriaName} - Rp ${saweriaAmount}`);
+    // Ekstrak field-field yang benar
+    const saweriaName = saweriaPayload.donator_name || 'Anonymous';
+    const saweriaAmountRaw = saweriaPayload.amount_raw || 0; // Gunakan amount_raw
+    const saweriaMessage = saweriaPayload.message || ''; // Jika ada field message
+    const saweriaEmail = saweriaPayload.donator_email || 'N/A'; // Jika ada
+    const created_at = saweriaPayload.created_at; // Timestamp dari Saweria
+    const saweriaId = saweriaPayload.id; // ID donasi Saweria (opsional, bisa untuk logging)
+
+    console.log(`Donasi diterima: ${saweriaName} - Rp ${saweriaAmountRaw}`);
 
     // 3. Siapkan payload untuk dikirim ke Roblox MessagingService
     // Format ini harus sesuai dengan yang diterima oleh MessagingService.SubscribeAsync di script Roblox kamu
     const robloxPayload = {
         userId: null, // Kita tidak bisa mendapatkan UserId langsung dari Saweria
-        username: saweriaName, // Gunakan nama dari Saweria
+        username: saweriaName, // Gunakan nama dari Saweria (donator_name)
         displayName: saweriaName, // Gunakan nama dari Saweria
-        amount: Math.floor(saweriaAmount), // Asumsikan 1 IDR = 1 Point, sesuaikan jika perlu
+        amount: Math.floor(saweriaAmountRaw), // Gunakan amount_raw, asumsikan 1 IDR = 1 Point
         total: null, // Total akan dihitung ulang oleh script Roblox
         timestamp: Math.floor(Date.now() / 1000), // Timestamp saat webhook diterima
-        source: 'Saweria' // Tandai sumbernya
+        source: 'Saweria', // Tandai sumbernya
+        message: saweriaMessage || '' // Kirim pesan jika ada
     };
 
     // 4. Kirim ke Roblox MessagingService
