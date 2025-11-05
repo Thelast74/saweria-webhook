@@ -10,9 +10,9 @@ app.use(express.json({ verify: (req, res, buf, encoding) => {
     }
 }}));
 
-// ✅ FIX 1: Gunakan UNIVERSE_ID bukan PLACE_ID
+// ✅ FIX: Gunakan UNIVERSE_ID bukan PLACE_ID
 const ROBLOX_API_KEY = process.env.ROBLOX_API_KEY;
-const UNIVERSE_ID = process.env.UNIVERSE_ID; // PENTING: Ini Universe ID, bukan Place ID!
+const UNIVERSE_ID = process.env.UNIVERSE_ID;
 const MESSAGING_TOPIC = process.env.MESSAGING_TOPIC || 'MedusaIDRBroadcast';
 
 if (!ROBLOX_API_KEY || !UNIVERSE_ID) {
@@ -22,14 +22,53 @@ if (!ROBLOX_API_KEY || !UNIVERSE_ID) {
 
 const PUBLISH_API_URL = `https://apis.roblox.com/messaging-service/v1/universes/${UNIVERSE_ID}/topics/${encodeURIComponent(MESSAGING_TOPIC)}`;
 
-console.log('Webhook Server Configuration:');
-console.log('- Universe ID:', UNIVERSE_ID);
-console.log('- Messaging Topic:', MESSAGING_TOPIC);
-console.log('- API URL:', PUBLISH_API_URL);
+console.log('========================================');
+console.log('🚀 Saweria x Roblox Webhook Server');
+console.log('========================================');
+console.log('Universe ID:', UNIVERSE_ID);
+console.log('Messaging Topic:', MESSAGING_TOPIC);
+console.log('API URL:', PUBLISH_API_URL);
+console.log('========================================');
 
-// Endpoint webhook Saweria
+// Helper function to send to Roblox with proper format
+async function sendToRoblox(payload) {
+    // CRITICAL: Roblox API requires {"message": <data>} format!
+    const requestBody = {
+        message: payload
+    };
+    
+    console.log('📤 Sending to Roblox MessagingService...');
+    console.log('Payload:', JSON.stringify(payload, null, 2));
+    
+    try {
+        const response = await axios.post(PUBLISH_API_URL, requestBody, {
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': ROBLOX_API_KEY
+            }
+        });
+        
+        console.log('✅ Successfully sent to Roblox!');
+        console.log('Response status:', response.status);
+        return { success: true, status: response.status };
+        
+    } catch (error) {
+        console.error('❌ Failed to send to Roblox!');
+        console.error('Error:', error.message);
+        if (error.response) {
+            console.error('Status:', error.response.status);
+            console.error('Data:', error.response.data);
+        }
+        throw error;
+    }
+}
+
+// Endpoint untuk menerima webhook dari Saweria
 app.post('/saweria-webhook', async (req, res) => {
-    console.log('=== Webhook diterima dari Saweria ===');
+    console.log('\n========================================');
+    console.log('📨 Webhook diterima dari Saweria');
+    console.log('Time:', new Date().toISOString());
+    console.log('========================================');
     console.log('Payload:', JSON.stringify(req.body, null, 2));
 
     const saweriaPayload = req.body;
@@ -51,61 +90,39 @@ app.post('/saweria-webhook', async (req, res) => {
     const message = saweriaPayload.message || '';
     const donatorEmail = saweriaPayload.donator_email || '';
     
-    console.log(`💰 Donasi: ${donatorName} - Rp ${amountRaw.toLocaleString('id-ID')}`);
-    if (message) console.log(`📝 Pesan: "${message}"`);
+    console.log('💰 Donasi:', donatorName, '- Rp', amountRaw.toLocaleString('id-ID'));
+    if (message) console.log('📝 Pesan:', `"${message}"`);
 
-    // ✅ FIX 2: Coba parse Roblox username dari message atau donator_name
-    // Format yang diharapkan di message: "[RobloxUsername] Pesan opsional"
+    // Parse Roblox username dari message atau gunakan donator_name
     let robloxUsername = null;
-    const usernameMatch = message.match(/^\[(\w+)\]/); // Match [Username]
+    const usernameMatch = message.match(/^\[(\w+)\]/);
     
     if (usernameMatch) {
         robloxUsername = usernameMatch[1];
-        console.log(`✅ Roblox username ditemukan: ${robloxUsername}`);
+        console.log('✅ Roblox username ditemukan:', robloxUsername);
     } else {
-        // Fallback: gunakan donator_name sebagai username
         robloxUsername = donatorName;
-        console.log(`⚠️ Username tidak ditemukan di message, gunakan donator_name: ${robloxUsername}`);
+        console.log('⚠️ Username tidak ditemukan di message, gunakan donator_name:', robloxUsername);
     }
 
-    // Payload untuk Roblox
+    // Siapkan payload untuk Roblox
     const robloxPayload = {
         username: robloxUsername,
-        displayName: donatorName, // Nama asli dari Saweria
+        displayName: donatorName,
         amount: Math.floor(amountRaw),
         timestamp: Math.floor(Date.now() / 1000),
         source: 'Saweria',
         message: message,
-        email: donatorEmail // Untuk debugging
+        email: donatorEmail
     };
 
-    console.log('📤 Mengirim ke Roblox:', JSON.stringify(robloxPayload, null, 2));
-
     try {
-        const response = await axios.post(PUBLISH_API_URL, robloxPayload, {
-            headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': ROBLOX_API_KEY
-            }
-        });
-        
-        console.log('✅ Berhasil mengirim ke Roblox MessagingService:', response.status);
-        console.log('Response:', response.data);
+        const result = await sendToRoblox(robloxPayload);
+        console.log('========================================\n');
         res.status(200).send('OK - Donation processed');
         
     } catch (error) {
-        console.error('❌ Gagal mengirim ke Roblox MessagingService');
-        
-        if (error.response) {
-            console.error('Status:', error.response.status);
-            console.error('Data:', JSON.stringify(error.response.data, null, 2));
-            console.error('Headers:', error.response.headers);
-        } else if (error.request) {
-            console.error('Request Error:', error.request);
-        } else {
-            console.error('Error Message:', error.message);
-        }
-        
+        console.log('========================================\n');
         res.status(500).send('Internal Server Error');
     }
 });
@@ -118,14 +135,18 @@ app.get('/', (req, res) => {
         universeId: UNIVERSE_ID,
         messagingTopic: MESSAGING_TOPIC,
         endpoints: {
-            webhook: '/saweria-webhook'
+            webhook: '/saweria-webhook',
+            test: '/test'
         }
     });
 });
 
-// Test endpoint (opsional, untuk testing manual)
+// Test endpoint
 app.post('/test', async (req, res) => {
+    console.log('\n========================================');
     console.log('🧪 Test endpoint called');
+    console.log('Time:', new Date().toISOString());
+    console.log('========================================');
     console.log('Request body:', req.body);
     
     const testPayload = {
@@ -134,41 +155,22 @@ app.post('/test', async (req, res) => {
         amount: parseInt(req.body.amount) || 10000,
         timestamp: Math.floor(Date.now() / 1000),
         source: 'Test',
-        message: req.body.message || 'Test donation'
+        message: req.body.message || 'Test donation from /test endpoint'
     };
     
-    console.log('Sending payload to Roblox:', testPayload);
-    
     try {
-        // CRITICAL: Wrap in "message" field for Roblox API
-        const requestBody = {
-            message: testPayload
-        };
-        
-        const response = await axios.post(PUBLISH_API_URL, requestBody, {
-            headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': ROBLOX_API_KEY
-            }
-        });
-        
-        console.log('✅ Successfully sent to Roblox');
-        console.log('Response status:', response.status);
-        console.log('Response data:', response.data);
+        const result = await sendToRoblox(testPayload);
+        console.log('========================================\n');
         
         res.json({ 
             success: true, 
-            status: response.status,
+            status: result.status,
             sentPayload: testPayload,
-            robloxResponse: response.data
+            note: 'Check Roblox F9 Console for message reception'
         });
+        
     } catch (error) {
-        console.error('❌ Failed to send to Roblox');
-        console.error('Error:', error.message);
-        if (error.response) {
-            console.error('Response status:', error.response.status);
-            console.error('Response data:', error.response.data);
-        }
+        console.log('========================================\n');
         
         res.status(500).json({ 
             success: false, 
@@ -178,19 +180,21 @@ app.post('/test', async (req, res) => {
     }
 });
 
-// Debug endpoint untuk melihat konfigurasi (HAPUS DI PRODUCTION!)
+// Debug endpoint (REMOVE IN PRODUCTION!)
 app.get('/debug', (req, res) => {
     res.json({
         universeId: UNIVERSE_ID,
         messagingTopic: MESSAGING_TOPIC,
         apiUrl: PUBLISH_API_URL,
         hasApiKey: !!ROBLOX_API_KEY,
-        apiKeyPrefix: ROBLOX_API_KEY ? ROBLOX_API_KEY.substring(0, 10) + '...' : 'NOT SET'
+        apiKeyPrefix: ROBLOX_API_KEY ? ROBLOX_API_KEY.substring(0, 10) + '...' : 'NOT SET',
+        nodeVersion: process.version,
+        env: process.env.NODE_ENV || 'development'
     });
 });
 
 app.listen(port, () => {
-    console.log(`✅ Server berjalan di port ${port}`);
+    console.log(`\n✅ Server running on port ${port}`);
     console.log(`📡 Webhook endpoint: http://localhost:${port}/saweria-webhook`);
-    console.log(`🧪 Test endpoint: http://localhost:${port}/test`);
+    console.log(`🧪 Test endpoint: http://localhost:${port}/test\n`);
 });
