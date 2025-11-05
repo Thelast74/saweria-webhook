@@ -142,13 +142,29 @@ app.post('/test', async (req, res) => {
                 'x-api-key': ROBLOX_API_KEY
             }
         });
-        res.json({ success: true, status: response.status });
+        res.json({ 
+            success: true, 
+            status: response.status,
+            sentPayload: testPayload 
+        });
     } catch (error) {
         res.status(500).json({ 
             success: false, 
-            error: error.response?.data || error.message 
+            error: error.response?.data || error.message,
+            sentPayload: testPayload
         });
     }
+});
+
+// Debug endpoint untuk melihat konfigurasi (HAPUS DI PRODUCTION!)
+app.get('/debug', (req, res) => {
+    res.json({
+        universeId: UNIVERSE_ID,
+        messagingTopic: MESSAGING_TOPIC,
+        apiUrl: PUBLISH_API_URL,
+        hasApiKey: !!ROBLOX_API_KEY,
+        apiKeyPrefix: ROBLOX_API_KEY ? ROBLOX_API_KEY.substring(0, 10) + '...' : 'NOT SET'
+    });
 });
 
 app.listen(port, () => {
