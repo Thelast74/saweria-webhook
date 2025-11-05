@@ -140,7 +140,12 @@ app.post('/test', async (req, res) => {
     console.log('Sending payload to Roblox:', testPayload);
     
     try {
-        const response = await axios.post(PUBLISH_API_URL, testPayload, {
+        // CRITICAL: Wrap in "message" field for Roblox API
+        const requestBody = {
+            message: testPayload
+        };
+        
+        const response = await axios.post(PUBLISH_API_URL, requestBody, {
             headers: {
                 'Content-Type': 'application/json',
                 'x-api-key': ROBLOX_API_KEY
